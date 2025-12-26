@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import json
 import pickle
+from google.cloud import storage
 
 app = Flask(__name__)
 
@@ -13,11 +14,35 @@ model = None
 
 def load_model():
     global model
+    display_error = False
+    
+    # Check if we should download from GCS
+    bucket_name = os.environ.get('MODEL_BUCKET')
+    if bucket_name and not os.path.exists(model_path):
+        print(f"Downloading model from GCS bucket: {bucket_name}")
+        try:
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob('models/readmission_model.pkl')
+            os.makedirs(os.path.dirname(model_path), exist_ok=True)
+            blob.download_to_filename(model_path)
+            print("Model downloaded successfully.")
+        except Exception as e:
+            print(f"Failed to download model from GCS: {e}")
+            display_error = True
+
     if os.path.exists(model_path):
-        with open(model_path, 'rb') as f:
-            model = pickle.load(f)
-        print("Model loaded successfully.")
+        try:
+            with open(model_path, 'rb') as f:
+                model = pickle.load(f)
+            print("Model loaded successfully.")
+        except Exception as e:
+            print(f"Failed to load model: {e}")
+            display_error = True
     else:
+        display_error = True
+
+    if display_error:
         print(f"Warning: Model not found at {model_path}. Predictions will fail.")
 
 
